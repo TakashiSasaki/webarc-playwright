@@ -6,7 +6,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// `__dirname` の代替取得
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -20,7 +19,6 @@ const PARALLEL_LIMIT = 5; // Maximum number of pages to process concurrently
 // ========================
 import express from 'express';
 import fs from 'fs';
-//import path from 'path';
 import crypto from 'crypto';
 import { chromium } from 'playwright';
 import pLimit from 'p-limit';
@@ -28,7 +26,7 @@ import pLimit from 'p-limit';
 // ========================
 // URL Normalization Function
 // ========================
-// 不要なトラッキングパラメータを削除することで、同一コンテンツを正規化する
+// Removes unnecessary tracking parameters to normalize the content URL
 function normalizeUrl(inputUrl) {
   try {
     const urlObj = new URL(inputUrl);
@@ -47,7 +45,7 @@ function normalizeUrl(inputUrl) {
     paramsToRemove.forEach(param => urlObj.searchParams.delete(param));
     return urlObj.toString();
   } catch (err) {
-    // 入力が不正な場合はそのまま返す
+    // Return the original input if URL is invalid
     return inputUrl;
   }
 }
@@ -64,6 +62,11 @@ if (!fs.existsSync(ARCHIVE_DIR)) {
 
 // Serve static files from the archive directory
 app.use('/files', express.static(ARCHIVE_DIR));
+
+// Serve index.html at the root URL for simple UI
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // Set up parallel limit using p-limit
 const limit = pLimit(PARALLEL_LIMIT);
@@ -88,23 +91,23 @@ app.get('/archive', async (req, res) => {
     return res.status(400).json({ error: 'URL is required as a query parameter.' });
   }
 
-  // 正規化：不要なトラッキングパラメータを削除
+  // Normalize URL by removing tracking parameters
   const normalizedUrl = normalizeUrl(originalUrl);
-  // 正規化したURLのSHA1ハッシュ値をファイル名のSTEMとして利用
+  // Use SHA1 hash of normalized URL as filename stem
   const hash = crypto.createHash('sha1').update(normalizedUrl).digest('hex');
   const archiveSubDir = path.join(ARCHIVE_DIR, hash);
   fs.mkdirSync(archiveSubDir, { recursive: true });
   
-  // 公開URLのベースパス
+  // Base public URL for the saved files
   const baseUrl = `${req.protocol}://${req.get('host')}/files/${hash}`;
   
   try {
     await limit(async () => {
       const page = await browser.newPage();
-      // 正規化したURLでページにアクセス
+      // Navigate to the normalized URL
       const response = await page.goto(normalizedUrl, { waitUntil: 'networkidle' });
       
-      // チェック：Content-Lengthが1GBを超えている場合は処理中断
+      // Check: if Content-Length exceeds 1GB, abort processing
       const contentLengthHeader = response.headers()['content-length'];
       if (contentLengthHeader && parseInt(contentLengthHeader, 10) > FILE_SIZE_LIMIT) {
         throw new Error('File size exceeds 1GB, not saving.');
@@ -114,29 +117,29 @@ app.get('/archive', async (req, res) => {
       let savedFiles = {};
 
       if (contentType.includes('text/html')) {
-        // HTMLの場合：レンダリング後のDOMを取得し、HTMLファイルとして保存
+        // For HTML: save rendered DOM as HTML file
         const htmlContent = await page.content();
         const htmlFileName = `${hash}.html`;
         fs.writeFileSync(path.join(archiveSubDir, htmlFileName), htmlContent, 'utf-8');
         savedFiles.html = `${baseUrl}/${htmlFileName}`;
 
-        // PDFとして保存（Chromiumでのみ利用可能）
+        // Save as PDF (available in Chromium)
         const pdfFileName = `${hash}.pdf`;
         await page.pdf({ path: path.join(archiveSubDir, pdfFileName), format: 'A4' });
         savedFiles.pdf = `${baseUrl}/${pdfFileName}`;
 
-        // スクリーンショットとして保存（ページ全体）
+        // Save full-page screenshot
         const screenshotFileName = `${hash}.png`;
         await page.screenshot({ path: path.join(archiveSubDir, screenshotFileName), fullPage: true });
         savedFiles.screenshot = `${baseUrl}/${screenshotFileName}`;
       } else if (contentType.includes('application/pdf')) {
-        // PDFの場合：バイナリデータを直接保存
+        // For PDF: directly save binary data
         const buffer = await response.body();
         const pdfFileName = `${hash}.pdf`;
         fs.writeFileSync(path.join(archiveSubDir, pdfFileName), buffer);
         savedFiles.file = `${baseUrl}/${pdfFileName}`;
       } else if (contentType.startsWith('image/')) {
-        // 画像の場合
+        // For images: determine extension based on content-type
         let ext = 'png';
         if (contentType.includes('jpeg')) ext = 'jpg';
         else if (contentType.includes('gif')) ext = 'gif';
@@ -145,14 +148,14 @@ app.get('/archive', async (req, res) => {
         fs.writeFileSync(path.join(archiveSubDir, imageFileName), buffer);
         savedFiles.file = `${baseUrl}/${imageFileName}`;
       } else if (contentType.startsWith('video/')) {
-        // 動画の場合：例として拡張子をContent-Typeから決定
+        // For videos: determine extension from content-type
         const ext = contentType.split('/')[1] || 'mp4';
         const buffer = await response.body();
         const videoFileName = `${hash}.${ext}`;
         fs.writeFileSync(path.join(archiveSubDir, videoFileName), buffer);
         savedFiles.file = `${baseUrl}/${videoFileName}`;
       } else if (contentType.includes('text/csv')) {
-        // CSVの場合
+        // For CSV files
         const buffer = await response.body();
         const csvFileName = `${hash}.csv`;
         fs.writeFileSync(path.join(archiveSubDir, csvFileName), buffer);
@@ -161,6 +164,7 @@ app.get('/archive', async (req, res) => {
         contentType.includes('application/vnd.ms-excel') ||
         contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       ) {
+        // For Excel files: decide extension based on content-type
         let ext = 'xls';
         if (contentType.includes('openxmlformats-officedocument.spreadsheetml.sheet')) ext = 'xlsx';
         const buffer = await response.body();
@@ -171,6 +175,7 @@ app.get('/archive', async (req, res) => {
         contentType.includes('application/msword') ||
         contentType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
       ) {
+        // For Word documents: decide extension based on content-type
         let ext = 'doc';
         if (contentType.includes('openxmlformats-officedocument.wordprocessingml.document')) ext = 'docx';
         const buffer = await response.body();
@@ -178,13 +183,13 @@ app.get('/archive', async (req, res) => {
         fs.writeFileSync(path.join(archiveSubDir, wordFileName), buffer);
         savedFiles.file = `${baseUrl}/${wordFileName}`;
       } else if (contentType.includes('application/zip')) {
-        // ZIPファイルの場合
+        // For ZIP files
         const buffer = await response.body();
         const zipFileName = `${hash}.zip`;
         fs.writeFileSync(path.join(archiveSubDir, zipFileName), buffer);
         savedFiles.file = `${baseUrl}/${zipFileName}`;
       } else {
-        // その他の場合：フォールバックとしてHTMLとして保存
+        // Fallback: save as HTML
         const htmlContent = await page.content();
         const htmlFileName = `${hash}.html`;
         fs.writeFileSync(path.join(archiveSubDir, htmlFileName), htmlContent, 'utf-8');
@@ -201,6 +206,9 @@ app.get('/archive', async (req, res) => {
   }
 });
 
+// ========================
+// Launch Browser and Start Server
+// ========================
 launchBrowser()
   .then(() => {
     app.listen(PORT, () => {
@@ -211,3 +219,6 @@ launchBrowser()
     console.error('Failed to launch browser:', error);
   });
 
+/*
+Commit Message: "Add index.html route for simple UI integration in archiveService.js"
+*/
