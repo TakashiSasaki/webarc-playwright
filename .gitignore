@@ -1,0 +1,52 @@
+# Node.js の依存パッケージ
+node_modules/
+
+# npm や yarn のロックファイル（必要に応じて管理する場合は除外）
+package-lock.json
+yarn.lock
+
+# 環境変数ファイル（機密情報保護のため）
+.env
+
+# ログファイル
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# キャッシュディレクトリ
+.cache/
+.playwright-cache/
+
+# Playwright が使用するブラウザバイナリのキャッシュ
+# ユーザーごとに異なるため、通常は含めない
+~/.cache/ms-playwright/
+
+# コンパイルされた出力（もし存在する場合）
+dist/
+build/
+
+# OS 固有のファイル
+.DS_Store
+Thumbs.db
+
+# エディタ/IDE 関連
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# 一時ファイル
+*.tmp
+*.temp
+
+# サービスが生成するアーカイブファイル（容量が大きくなるため）
+archive/
+
+# その他、不要なローカル設定ファイル（必要に応じて）
+*.bak
+*.swp
+
