@@ -26,10 +26,15 @@ import pLimit from 'p-limit';
 // ========================
 // URL Normalization Function
 // ========================
-// Removes unnecessary tracking parameters to normalize the content URL
+// Removes unnecessary tracking parameters to normalize the content URL.
+// Adds "https://" if the input URL does not include a scheme.
 function normalizeUrl(inputUrl) {
   try {
-    const urlObj = new URL(inputUrl);
+    let url = inputUrl;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    const urlObj = new URL(url);
     const paramsToRemove = [
       'utm_source',
       'utm_medium',
@@ -91,7 +96,7 @@ app.get('/archive', async (req, res) => {
     return res.status(400).json({ error: 'URL is required as a query parameter.' });
   }
 
-  // Normalize URL by removing tracking parameters
+  // Normalize URL by adding scheme if missing and removing tracking parameters
   const normalizedUrl = normalizeUrl(originalUrl);
   // Use SHA1 hash of normalized URL as filename stem
   const hash = crypto.createHash('sha1').update(normalizedUrl).digest('hex');
@@ -100,22 +105,22 @@ app.get('/archive', async (req, res) => {
   
   // Base public URL for the saved files
   const baseUrl = `${req.protocol}://${req.get('host')}/files/${hash}`;
-  
+  let savedFiles = {}; // Defined here to be available even on error
+
   try {
     await limit(async () => {
       const page = await browser.newPage();
       // Navigate to the normalized URL
       const response = await page.goto(normalizedUrl, { waitUntil: 'networkidle' });
-      
+
       // Check: if Content-Length exceeds 1GB, abort processing
       const contentLengthHeader = response.headers()['content-length'];
       if (contentLengthHeader && parseInt(contentLengthHeader, 10) > FILE_SIZE_LIMIT) {
         throw new Error('File size exceeds 1GB, not saving.');
       }
-      
-      const contentType = response.headers()['content-type'] || '';
-      let savedFiles = {};
 
+      const contentType = response.headers()['content-type'] || '';
+      
       if (contentType.includes('text/html')) {
         // For HTML: save rendered DOM as HTML file
         const htmlContent = await page.content();
@@ -202,7 +207,7 @@ app.get('/archive', async (req, res) => {
     res.json(savedFiles);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message || 'Archiving failed.' });
+    res.status(500).json({ error: err.message || 'Archiving failed.', files: savedFiles });
   }
 });
 
@@ -220,5 +225,5 @@ launchBrowser()
   });
 
 /*
-Commit Message: "Add index.html route for simple UI integration in archiveService.js"
+Commit Message: "Fix URL normalization to add missing scheme and define savedFiles for error handling."
 */
