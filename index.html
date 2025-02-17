@@ -1,0 +1,62 @@
+<!-- index.html: Simple UI for the Archive Service -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Simple Archive Service UI</title>
+  <style>
+    /* Basic styling for the UI */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    form {
+      margin-bottom: 20px;
+    }
+    input[type="text"] {
+      width: 300px;
+      padding: 5px;
+      margin-right: 10px;
+    }
+    button {
+      padding: 5px 10px;
+    }
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Archive Service</h1>
+  <form id="archiveForm">
+    <label for="urlInput">Enter URL to archive:</label>
+    <input type="text" id="urlInput" name="url" placeholder="https://example.com" required>
+    <button type="submit">Archive</button>
+  </form>
+  <div id="result"></div>
+  
+  <script>
+    // Handle form submission and display the archive result
+    document.getElementById('archiveForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const urlInput = document.getElementById('urlInput');
+      const resultDiv = document.getElementById('result');
+      resultDiv.textContent = 'Archiving...';
+      try {
+        // Send GET request to /archive endpoint with the provided URL
+        const response = await fetch(`/archive?url=${encodeURIComponent(urlInput.value)}`);
+        const data = await response.json();
+        if (response.ok) {
+          resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+        } else {
+          resultDiv.textContent = data.error || 'An error occurred.';
+        }
+      } catch (error) {
+        resultDiv.textContent = 'Error: ' + error.message;
+      }
+    });
+  </script>
+</body>
+</html>
+
